@@ -111,18 +111,27 @@ const RowFilter: React.FC = () => {
 
   /**
    * Recursively flattens any group that has only 1 child.
+   * Also removes groups that become empty (unless it's the root).
    */
-  const flatten = (node: Group | Condition, isRoot = false): Group | Condition => {
+  const flatten = (node: Group | Condition, isRoot = false): Group | Condition | null => {
     if (node.type === 'item') return node;
 
-    const newChildren = node.children.map(c => flatten(c, false));
+    // First process all children recursively
+    const processedChildren = node.children
+      .map(c => flatten(c, false))
+      .filter((c): c is Condition | Group => c !== null);
     
-    // If not root and only one child remains, promote child
-    if (!isRoot && newChildren.length === 1) {
-      return newChildren[0];
+    // If not root and no children remain, this group should be removed
+    if (!isRoot && processedChildren.length === 0) {
+      return null;
     }
 
-    return { ...node, children: newChildren };
+    // If not root and only one child remains, promote the child to replace this group
+    if (!isRoot && processedChildren.length === 1) {
+      return processedChildren[0];
+    }
+
+    return { ...node, children: processedChildren };
   };
 
   const handleAction = (targetId: string, action: 'add_in' | 'add_out' | 'to_sub' | 'delete') => {
@@ -139,6 +148,8 @@ const RowFilter: React.FC = () => {
         }
         if (action === 'delete') {
           newChildren.splice(idx, 1);
+          // If the group is now empty and it's not the root, signal deletion to parent
+          if (newChildren.length === 0 && g.id !== 'root') return null;
           return { ...g, children: newChildren };
         }
         if (action === 'to_sub') {
@@ -146,36 +157,49 @@ const RowFilter: React.FC = () => {
           newChildren[idx] = sub;
           return { ...g, children: newChildren };
         }
-        // add_out logic is handled when we are at the parent level
       }
 
-      // Check for add_out or drill down
-      for (let i = 0; i < g.children.length; i++) {
-        const child = g.children[i];
+      // Check for nested updates
+      let changed = false;
+      const nextChildren = g.children.map(child => {
         if (child.type === 'group') {
-          // Special check for add_out
-          const hasTarget = child.children.some(c => c.id === targetId);
-          if (hasTarget && action === 'add_out') {
-            const newChildren = [...g.children];
-            newChildren.splice(i + 1, 0, createNewCondition());
-            return { ...g, children: newChildren };
-          }
-
           const updatedChild = performUpdate(child);
           if (updatedChild !== child) {
-            const newChildren = [...g.children];
-            if (updatedChild === null) newChildren.splice(i, 1);
-            else newChildren[i] = updatedChild;
-            return { ...g, children: newChildren };
+            changed = true;
+            return updatedChild;
           }
         }
+        return child;
+      }).filter((c): c is Group | Condition => c !== null);
+
+      // Handle add_out separately as it adds a sibling to a parent
+      if (action === 'add_out') {
+        const childIdx = g.children.findIndex(child => 
+          child.type === 'group' && child.children.some(c => c.id === targetId)
+        );
+        if (childIdx !== -1) {
+          const resultChildren = [...nextChildren];
+          const currentRefIdx = resultChildren.findIndex(c => c.id === g.children[childIdx].id);
+          resultChildren.splice(currentRefIdx + 1, 0, createNewCondition());
+          return { ...g, children: resultChildren };
+        }
       }
+
+      if (changed) {
+        if (nextChildren.length === 0 && g.id !== 'root') return null;
+        return { ...g, children: nextChildren };
+      }
+
       return g;
     };
 
     const newRoot = performUpdate(rootGroup);
     if (newRoot) {
-      setRootGroup(flatten(newRoot, true) as Group);
+      // Apply the recursive flattening logic to handle the "single child" promotion requirement
+      const result = flatten(newRoot, true);
+      if (result && result.type === 'group') {
+        setRootGroup(result);
+      }
     }
   };
 
