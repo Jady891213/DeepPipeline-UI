@@ -9,7 +9,11 @@ import {
   LayoutList,
   Network,
   FunctionSquare,
-  MoreVertical
+  MoreVertical,
+  PlusSquare,
+  Layers,
+  ArrowRightCircle,
+  PlusCircle
 } from 'lucide-react';
 
 type Conjunction = 'AND' | 'OR';
@@ -78,13 +82,15 @@ const RowFilter: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white font-sans overflow-hidden">
+    <div className="flex flex-col h-full bg-white font-sans overflow-hidden text-slate-900">
       {/* Header - Compact */}
       <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
-        <h2 className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
-          <div className={`w-1 h-3 rounded-full bg-indigo-500`}></div>
-          行过滤配置 (分组模式)
-        </h2>
+        <div className="flex items-center gap-1.5">
+          <div className="w-1 h-3 rounded-full bg-indigo-500"></div>
+          <h2 className="text-[11px] font-bold text-slate-700">
+            行过滤配置 (分组模式)
+          </h2>
+        </div>
         
         <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200">
           <button 
@@ -118,7 +124,7 @@ const RowFilter: React.FC = () => {
       <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
         <span className="text-[10px] text-slate-400 font-medium">逻辑嵌套深度: 3 层</span>
         <div className="flex gap-2">
-          <button className="px-4 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700">重置</button>
+          <button className="px-4 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 transition-colors">重置</button>
           <button className="px-5 py-1 text-[11px] font-bold bg-indigo-600 text-white rounded shadow-sm hover:bg-indigo-700 transition-all">应用配置</button>
         </div>
       </div>
@@ -139,8 +145,9 @@ const GroupNode: React.FC<{ group: Group; depth: number; style: UIStyle; onToggl
   return (
     <div className={`relative ${indentClass}`}>
       <div className="relative">
+        {/* Connector Rail & Switcher - Rail made thicker (w-[2px]) */}
         <div className={`absolute ${railOffset} top-0 bottom-0 flex items-center justify-center w-6`}>
-          <div className={`w-[1px] ${railColorClass} absolute top-0 bottom-0 left-1/2 -translate-x-1/2 rounded-full opacity-30`}></div>
+          <div className={`w-[2px] ${railColorClass} absolute top-0 bottom-0 left-1/2 -translate-x-1/2 rounded-full opacity-30`}></div>
           <button 
             onClick={() => onToggle(group.id)}
             className={`z-30 inline-flex items-center justify-center min-w-[20px] px-1 h-[18px] rounded-[3px] text-[10px] font-black shadow-sm transition-all hover:scale-110 active:scale-95 select-none ${buttonColorClass}`}
@@ -149,6 +156,7 @@ const GroupNode: React.FC<{ group: Group; depth: number; style: UIStyle; onToggl
           </button>
         </div>
 
+        {/* Children List */}
         <div className="flex flex-col gap-3">
           {group.children.map((child) => (
             <div key={child.id} className="relative">
@@ -168,41 +176,38 @@ const GroupNode: React.FC<{ group: Group; depth: number; style: UIStyle; onToggl
           ))}
         </div>
       </div>
-
-      <div className="relative flex items-center gap-1 py-1 mt-3">
-         <div className={`absolute ${railOffset} top-1/2 w-4 h-[1px] ${railColorClass} opacity-20`}></div>
-         <button className="flex items-center gap-1 text-[10px] font-bold text-indigo-600/70 hover:text-indigo-600 transition-all bg-indigo-50/30 px-2 py-1 rounded border border-indigo-100 hover:border-indigo-200 hover:shadow-sm">
-           <Plus size={12} strokeWidth={3} />
-           <span>添加条件</span>
-         </button>
-      </div>
     </div>
   );
 };
 
 const ConditionItem: React.FC<{ condition: Condition }> = ({ condition }) => {
   return (
-    <div className="bg-white border border-slate-200 rounded shadow-[0_1px_3px_rgba(0,0,0,0.02)] hover:border-indigo-300 hover:shadow-md transition-all flex flex-col relative group/card">
+    <div className="bg-transparent border border-transparent rounded transition-all flex flex-col relative group/card hover:bg-slate-50/50">
       
-      {/* Action Dropdown - Icon only as requested */}
+      {/* Action Dropdown Trigger - Icon Always Visible */}
       <div className="absolute top-2 right-2 z-40 group/actions">
         <div className="p-1 text-slate-300 hover:text-indigo-600 transition-colors cursor-pointer">
           <MoreVertical size={14} />
         </div>
         
-        <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-slate-100 rounded-lg shadow-2xl py-1 opacity-0 pointer-events-none group-hover/actions:opacity-100 group-hover/actions:pointer-events-auto transition-all scale-95 group-hover/actions:scale-100 origin-top-right z-50">
-          <button className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-            <Plus size={12} />
-            <span>在此后添加</span>
+        {/* Menu Items: 添加组内条件, 添加组外条件, 转换为子组并添加条件, 删除 */}
+        <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-100 rounded-lg shadow-xl py-1 opacity-0 pointer-events-none group-hover/actions:opacity-100 group-hover/actions:pointer-events-auto transition-all scale-95 group-hover/actions:scale-100 origin-top-right z-50 overflow-hidden">
+          <button className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left">
+            <PlusCircle size={12} className="shrink-0 text-slate-400" />
+            <span>添加组内条件</span>
           </button>
-          <button className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors">
-            <Copy size={12} />
-            <span>复制条件</span>
+          <button className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left">
+            <ArrowRightCircle size={12} className="shrink-0 text-slate-400" />
+            <span>添加组外条件</span>
+          </button>
+          <button className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left">
+            <Layers size={12} className="shrink-0 text-slate-400" />
+            <span>转换为子组并添加条件</span>
           </button>
           <div className="my-1 border-t border-slate-50" />
-          <button className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-            <Trash2 size={12} />
-            <span>删除条件</span>
+          <button className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors text-left">
+            <Trash2 size={12} className="shrink-0" />
+            <span>删除</span>
           </button>
         </div>
       </div>
@@ -210,18 +215,18 @@ const ConditionItem: React.FC<{ condition: Condition }> = ({ condition }) => {
       {/* Row 1: Field Selection & Operator */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         {/* Field Selection */}
-        <div className="flex-1 min-w-0 h-7 flex items-center px-2 bg-slate-50 border border-slate-100 rounded text-[11px] font-bold text-slate-600 truncate cursor-pointer hover:border-indigo-300 transition-all group/field">
+        <div className="flex-1 min-w-0 h-7 flex items-center px-2 bg-slate-100/40 border border-slate-200/50 rounded text-[11px] font-bold text-slate-600 truncate cursor-pointer hover:border-indigo-300 hover:bg-white transition-all group/field">
           <span className="truncate">{condition.field}</span>
           <ChevronDown size={10} className="ml-auto text-slate-300 group-hover/field:text-indigo-500" />
         </div>
 
-        {/* Operator Select */}
-        <div className="shrink-0 min-w-[120px] h-7 flex items-center justify-between px-2.5 border border-slate-100 rounded text-[11px] font-bold text-indigo-500 bg-white hover:border-indigo-300 transition-all cursor-pointer group/op">
-          <span className="truncate mr-2">{condition.operator}</span>
-          <ChevronDown size={10} className="text-indigo-300 group-hover/op:text-indigo-500" />
+        {/* Operator Select - Narrowed to 60% (~72px) */}
+        <div className="shrink-0 min-w-[72px] h-7 flex items-center justify-between px-2 border border-slate-200/50 rounded text-[11px] font-bold text-indigo-500 bg-white hover:border-indigo-300 transition-all cursor-pointer group/op">
+          <span className="truncate mr-1">{condition.operator}</span>
+          <ChevronDown size={10} className="text-indigo-300 group-hover/op:text-indigo-500 shrink-0" />
         </div>
         
-        {/* Space reserved for action button */}
+        {/* Placeholder for menu icon */}
         <div className="w-6 shrink-0" />
       </div>
 
@@ -240,7 +245,7 @@ const ConditionItem: React.FC<{ condition: Condition }> = ({ condition }) => {
             type="text" 
             placeholder="输入匹配值..."
             defaultValue={condition.value}
-            className="w-full text-[11px] pl-10 pr-3 py-1.5 rounded border border-slate-100 bg-slate-50/50 focus:bg-white focus:border-indigo-300 focus:ring-1 focus:ring-indigo-100 outline-none transition-all placeholder:text-slate-300 text-slate-500 font-medium"
+            className="w-full text-[11px] pl-10 pr-3 py-1.5 rounded border border-slate-200/50 bg-white focus:border-indigo-300 focus:ring-1 focus:ring-indigo-100 outline-none transition-all placeholder:text-slate-300 text-slate-600 font-medium"
           />
         </div>
       </div>
