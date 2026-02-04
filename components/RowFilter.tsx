@@ -334,21 +334,35 @@ const ConditionItem: React.FC<{
 
   return (
     <div className="bg-white border border-slate-100 rounded-lg shadow-sm hover:border-indigo-100/80 transition-all flex flex-col group/card">
-      {/* Header Row: Field + Operator + Menu */}
+      {/* 第一行: 字段选择 + 操作符 (腾出空间) */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-        {/* Source Field Selection */}
         <div className="flex-1 min-w-0 h-7 flex items-center px-2 bg-slate-50 border border-slate-100 rounded text-[11px] font-bold text-slate-600 truncate cursor-pointer hover:border-indigo-200 transition-all group/field">
           <span className="truncate">{condition.field}</span>
           <ChevronDown size={10} className="ml-auto text-slate-300 group-hover/field:text-indigo-400" />
         </div>
 
-        {/* Operator Selection */}
         <div className="shrink-0 min-w-[70px] h-7 flex items-center justify-between px-2 border border-indigo-50 rounded text-[11px] font-bold text-indigo-500 bg-indigo-50/20 hover:border-indigo-300 transition-all cursor-pointer group/op">
           <span className="truncate">{condition.operator}</span>
           <ChevronDown size={10} className="text-indigo-300 ml-1 shrink-0 group-hover/op:text-indigo-500" />
         </div>
+      </div>
 
-        {/* More Menu Button - Fixed layout placement to prevent overlap */}
+      {/* 第二行: 值输入框 + 更多操作按钮 (移至此处) */}
+      <div className="px-3 pb-3 flex items-center gap-2">
+        <div className="relative flex-1 flex items-center">
+          <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10">
+            {condition.isFx ? <FunctionSquare size={12} className="text-indigo-400" /> : <Type size={12} className="text-slate-300" />}
+            <div className="w-[1px] h-3 bg-slate-200" />
+          </div>
+          <input 
+            type="text" 
+            placeholder="输入匹配值..."
+            defaultValue={condition.value}
+            className="w-full text-[11px] pl-10 pr-3 py-1.5 rounded border border-slate-100 bg-slate-50/30 focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all font-medium text-slate-600"
+          />
+        </div>
+
+        {/* More Menu Button - Moved to Row 2 end */}
         <div className="shrink-0 relative" ref={menuRef}>
           <button 
             onClick={() => setMenuOpen(!menuOpen)} 
@@ -366,22 +380,6 @@ const ConditionItem: React.FC<{
               <MenuOption icon={<Trash2 size={12}/>} label="删除" onClick={() => handleMenuClick('delete')} variant="danger" disabled={isOnly} />
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Value Input Row */}
-      <div className="px-3 pb-3">
-        <div className="relative flex items-center">
-          <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10">
-            {condition.isFx ? <FunctionSquare size={12} className="text-indigo-400" /> : <Type size={12} className="text-slate-300" />}
-            <div className="w-[1px] h-3 bg-slate-200" />
-          </div>
-          <input 
-            type="text" 
-            placeholder="输入匹配值..."
-            defaultValue={condition.value}
-            className="w-full text-[11px] pl-10 pr-3 py-1.5 rounded border border-slate-100 bg-slate-50/30 focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all font-medium text-slate-600"
-          />
         </div>
       </div>
     </div>
