@@ -34,10 +34,12 @@ interface Group {
   children: (Condition | Group)[];
 }
 
+type FilterNode = Condition | Group;
+
 const RowFilter: React.FC = () => {
   const [activeStyle, setActiveStyle] = useState<UIStyle>('spine');
   
-  const [rootGroup, setRootGroup] = useState<Group>({
+  const [root, setRoot] = useState<FilterNode>({
     id: 'root',
     type: 'group',
     conjunction: 'AND',
@@ -67,23 +69,17 @@ const RowFilter: React.FC = () => {
             ]
           }
         ]
-      },
-      { id: 'c6', type: 'item', field: 'order_status', operator: '不在...列表中', value: "['CANCELLED']", isFx: false }
+      }
     ]
   });
 
-  // Calculate total conditions accurately
   const totalConditionCount = useMemo(() => {
-    const countItems = (g: Group): number => {
-      let count = 0;
-      for (const child of g.children) {
-        if (child.type === 'item') count++;
-        else count += countItems(child);
-      }
-      return count;
+    const countItems = (node: FilterNode): number => {
+      if (node.type === 'item') return 1;
+      return node.children.reduce((acc, child) => acc + countItems(child), 0);
     };
-    return countItems(rootGroup);
-  }, [rootGroup]);
+    return countItems(root);
+  }, [root]);
 
   const createNewCondition = (): Condition => ({
     id: 'c_' + Math.random().toString(36).substr(2, 9),
@@ -94,7 +90,7 @@ const RowFilter: React.FC = () => {
     isFx: false
   });
 
-  const createNewGroup = (children: (Condition | Group)[] = []): Group => ({
+  const createNewGroup = (children: FilterNode[] = []): Group => ({
     id: 'g_' + Math.random().toString(36).substr(2, 9),
     type: 'group',
     conjunction: 'AND',
@@ -102,104 +98,90 @@ const RowFilter: React.FC = () => {
   });
 
   const toggleConjunction = (groupId: string) => {
-    const update = (g: Group): Group => {
-      if (g.id === groupId) return { ...g, conjunction: g.conjunction === 'AND' ? 'OR' : 'AND' };
-      return { ...g, children: g.children.map(c => c.type === 'group' ? update(c) : c) };
+    const update = (node: FilterNode): FilterNode => {
+      if (node.type === 'group') {
+        if (node.id === groupId) return { ...node, conjunction: node.conjunction === 'AND' ? 'OR' : 'AND' };
+        return { ...node, children: node.children.map(update) };
+      }
+      return node;
     };
-    setRootGroup(update(rootGroup));
+    setRoot(update(root));
   };
 
-  /**
-   * Recursively flattens any group that has only 1 child.
-   * Also removes groups that become empty (unless it's the root).
-   */
-  const flatten = (node: Group | Condition, isRoot = false): Group | Condition | null => {
+  const flatten = (node: FilterNode): FilterNode | null => {
     if (node.type === 'item') return node;
 
-    // First process all children recursively
     const processedChildren = node.children
-      .map(c => flatten(c, false))
-      .filter((c): c is Condition | Group => c !== null);
+      .map(flatten)
+      .filter((c): c is FilterNode => c !== null);
     
-    // If not root and no children remain, this group should be removed
-    if (!isRoot && processedChildren.length === 0) {
-      return null;
-    }
-
-    // If not root and only one child remains, promote the child to replace this group
-    if (!isRoot && processedChildren.length === 1) {
-      return processedChildren[0];
-    }
+    if (processedChildren.length === 0) return null;
+    if (processedChildren.length === 1) return processedChildren[0];
 
     return { ...node, children: processedChildren };
   };
 
   const handleAction = (targetId: string, action: 'add_in' | 'add_out' | 'to_sub' | 'delete') => {
-    const performUpdate = (g: Group): Group | null => {
-      const idx = g.children.findIndex(c => c.id === targetId);
-      
+    const performUpdate = (node: FilterNode): FilterNode | null => {
+      if (node.type === 'item') {
+        if (node.id === targetId && action === 'delete') return null;
+        return node;
+      }
+
+      const idx = node.children.findIndex(c => c.id === targetId);
       if (idx !== -1) {
-        const newChildren = [...g.children];
-        const target = g.children[idx];
+        const newChildren = [...node.children];
+        const target = node.children[idx];
 
         if (action === 'add_in') {
           newChildren.splice(idx + 1, 0, createNewCondition());
-          return { ...g, children: newChildren };
+          return { ...node, children: newChildren };
         }
         if (action === 'delete') {
           newChildren.splice(idx, 1);
-          // If the group is now empty and it's not the root, signal deletion to parent
-          if (newChildren.length === 0 && g.id !== 'root') return null;
-          return { ...g, children: newChildren };
+          return newChildren.length === 0 ? null : { ...node, children: newChildren };
         }
         if (action === 'to_sub') {
           const sub = createNewGroup([target, createNewCondition()]);
           newChildren[idx] = sub;
-          return { ...g, children: newChildren };
+          return { ...node, children: newChildren };
         }
       }
 
-      // Check for nested updates
       let changed = false;
-      const nextChildren = g.children.map(child => {
-        if (child.type === 'group') {
-          const updatedChild = performUpdate(child);
-          if (updatedChild !== child) {
-            changed = true;
-            return updatedChild;
-          }
+      const nextChildren = node.children.map(child => {
+        const updatedChild = performUpdate(child);
+        if (updatedChild !== child) {
+          changed = true;
+          return updatedChild;
         }
         return child;
-      }).filter((c): c is Group | Condition => c !== null);
+      }).filter((c): c is FilterNode => c !== null);
 
-      // Handle add_out separately as it adds a sibling to a parent
       if (action === 'add_out') {
-        const childIdx = g.children.findIndex(child => 
+        const childIdx = node.children.findIndex(child => 
           child.type === 'group' && child.children.some(c => c.id === targetId)
         );
         if (childIdx !== -1) {
           const resultChildren = [...nextChildren];
-          const currentRefIdx = resultChildren.findIndex(c => c.id === g.children[childIdx].id);
-          resultChildren.splice(currentRefIdx + 1, 0, createNewCondition());
-          return { ...g, children: resultChildren };
+          resultChildren.splice(childIdx + 1, 0, createNewCondition());
+          return { ...node, children: resultChildren };
         }
       }
 
       if (changed) {
-        if (nextChildren.length === 0 && g.id !== 'root') return null;
-        return { ...g, children: nextChildren };
+        return nextChildren.length === 0 ? null : { ...node, children: nextChildren };
       }
 
-      return g;
+      return node;
     };
 
-    const newRoot = performUpdate(rootGroup);
-    if (newRoot) {
-      // Apply the recursive flattening logic to handle the "single child" promotion requirement
-      const result = flatten(newRoot, true);
-      if (result && result.type === 'group') {
-        setRootGroup(result);
-      }
+    const updatedRoot = performUpdate(root);
+    if (!updatedRoot) {
+      setRoot(createNewGroup([createNewCondition()]));
+    } else {
+      const flattenedRoot = flatten(updatedRoot);
+      setRoot(flattenedRoot || createNewGroup([createNewCondition()]));
     }
   };
 
@@ -208,7 +190,7 @@ const RowFilter: React.FC = () => {
       <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
         <div className="flex items-center gap-1.5">
           <div className="w-1 h-3 rounded-full bg-indigo-500"></div>
-          <h2 className="text-[11px] font-bold text-slate-700">行过滤配置 (分组模式)</h2>
+          <h2 className="text-[11px] font-bold text-slate-700">条件过滤 (动态溶解)</h2>
         </div>
         
         <div className="flex bg-slate-100 p-0.5 rounded-md border border-slate-200">
@@ -227,32 +209,43 @@ const RowFilter: React.FC = () => {
         </div>
       </div>
 
-      <div className={`flex-1 overflow-auto p-6 transition-colors ${activeStyle === 'spine' ? 'bg-white' : 'bg-slate-50/20'}`}>
+      <div className="flex-1 overflow-auto p-6 bg-white transition-colors">
         <div className="max-w-[600px]">
-          <GroupNode 
-            group={rootGroup} 
-            depth={0} 
-            style={activeStyle}
-            onToggle={toggleConjunction} 
-            onAction={handleAction}
-            totalConditions={totalConditionCount}
-          />
+          {root.type === 'item' ? (
+            <div className="ml-4">
+              <ConditionItem 
+                condition={root} 
+                isOnly={true} 
+                depth={0} 
+                onAction={(action) => handleAction(root.id, action)} 
+              />
+            </div>
+          ) : (
+            <GroupNode 
+              group={root} 
+              depth={0} 
+              style={activeStyle}
+              onToggle={toggleConjunction} 
+              onAction={handleAction}
+              totalConditions={totalConditionCount}
+            />
+          )}
         </div>
       </div>
 
       <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
-        <span className="text-[10px] text-slate-400 font-medium tracking-tight">
-          活跃条件数: {totalConditionCount}
+        <span className="text-[10px] text-slate-400 font-medium">
+          已配置条件: {totalConditionCount}
         </span>
         <div className="flex gap-2">
           <button 
-            onClick={() => setRootGroup(createNewGroup([createNewCondition()]))}
+            onClick={() => setRoot(createNewGroup([createNewCondition()]))}
             className="px-4 py-1 text-[11px] font-bold text-slate-500 hover:text-slate-700 transition-colors"
           >
-            重置
+            清空
           </button>
           <button className="px-5 py-1 text-[11px] font-bold bg-indigo-600 text-white rounded shadow-sm hover:bg-indigo-700 transition-all">
-            应用配置
+            同步配置
           </button>
         </div>
       </div>
@@ -270,9 +263,7 @@ const GroupNode: React.FC<{
 }> = ({ group, depth, style, onToggle, onAction, totalConditions }) => {
   const isAnd = group.conjunction === 'AND';
   const railColorClass = isAnd ? 'bg-orange-400' : 'bg-teal-400';
-  const buttonColorClass = isAnd 
-    ? 'bg-orange-500 text-white border-orange-600' 
-    : 'bg-teal-500 text-white border-teal-600';
+  const buttonColorClass = isAnd ? 'bg-orange-500 border-orange-600' : 'bg-teal-500 border-teal-600';
 
   const indentClass = depth > 0 ? 'mt-4 ml-8' : 'ml-4';
   const railOffset = '-left-8';
@@ -284,7 +275,7 @@ const GroupNode: React.FC<{
           <div className={`w-[2px] ${railColorClass} absolute top-0 bottom-0 left-1/2 -translate-x-1/2 rounded-full opacity-30`}></div>
           <button 
             onClick={() => onToggle(group.id)}
-            className={`z-30 inline-flex items-center justify-center min-w-[20px] px-1.5 h-[18px] rounded-[3px] text-[10px] font-black shadow-sm transition-all hover:scale-110 active:scale-95 select-none ${buttonColorClass}`}
+            className={`z-30 inline-flex items-center justify-center min-w-[20px] px-1.5 h-[18px] rounded-[3px] text-[10px] font-black shadow-sm text-white transition-all hover:scale-110 active:scale-95 select-none border ${buttonColorClass}`}
           >
             {isAnd ? '且' : '或'}
           </button>
@@ -293,25 +284,23 @@ const GroupNode: React.FC<{
         <div className="flex flex-col gap-3">
           {group.children.map((child) => (
             <div key={child.id} className="relative">
-              <div className="flex-1">
-                {child.type === 'item' ? (
-                  <ConditionItem 
-                    condition={child} 
-                    isOnly={totalConditions <= 1} 
-                    depth={depth}
-                    onAction={(action) => onAction(child.id, action)} 
-                  />
-                ) : (
-                  <GroupNode 
-                    group={child} 
-                    depth={depth + 1} 
-                    style={style}
-                    onToggle={onToggle} 
-                    onAction={onAction}
-                    totalConditions={totalConditions}
-                  />
-                )}
-              </div>
+              {child.type === 'item' ? (
+                <ConditionItem 
+                  condition={child} 
+                  isOnly={totalConditions <= 1} 
+                  depth={depth}
+                  onAction={(action) => onAction(child.id, action)} 
+                />
+              ) : (
+                <GroupNode 
+                  group={child} 
+                  depth={depth + 1} 
+                  style={style}
+                  onToggle={onToggle} 
+                  onAction={onAction}
+                  totalConditions={totalConditions}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -328,15 +317,11 @@ const ConditionItem: React.FC<{
 }> = ({ condition, isOnly, depth, onAction }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  
-  // Disable add_out if at top level (depth 0) OR if it's the only condition
   const disableAddOut = isOnly || depth === 0;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
     };
     if (menuOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -348,94 +333,77 @@ const ConditionItem: React.FC<{
   };
 
   return (
-    <div className="bg-transparent border border-transparent rounded transition-all flex flex-col relative group/card hover:bg-slate-50/50 hover:border-indigo-100/50">
-      
-      {/* More Button */}
-      <div className="absolute top-2 right-2 z-40" ref={menuRef}>
-        <button 
-          onClick={() => setMenuOpen(!menuOpen)}
-          className={`p-1 transition-colors ${menuOpen ? 'text-indigo-600' : 'text-slate-300 hover:text-indigo-600'}`}
-        >
-          <MoreVertical size={14} />
-        </button>
-        
-        {/* Dropdown Menu - Includes the requested 4 operations */}
-        {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-100 rounded-lg shadow-xl py-1 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
-            <button 
-              onClick={() => handleMenuClick('add_in')}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left group/btn"
-            >
-              <PlusCircle size={12} className="shrink-0 text-slate-400 group-hover/btn:text-indigo-500" />
-              <span>添加组内条件</span>
-            </button>
-            
-            <button 
-              disabled={disableAddOut}
-              onClick={() => handleMenuClick('add_out')}
-              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-left transition-colors group/btn ${disableAddOut ? 'text-slate-300 cursor-not-allowed bg-slate-50/50' : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'}`}
-            >
-              <ArrowRightCircle size={12} className={`shrink-0 ${disableAddOut ? 'text-slate-200' : 'text-slate-400 group-hover/btn:text-indigo-500'}`} />
-              <span>添加组外条件</span>
-              {disableAddOut && <Ban size={10} className="ml-auto text-slate-200" />}
-            </button>
-            
-            <button 
-              onClick={() => handleMenuClick('to_sub')}
-              className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors text-left group/btn"
-            >
-              <Layers size={12} className="shrink-0 text-slate-400 group-hover/btn:text-indigo-500" />
-              <span>转换为子组并添加条件</span>
-            </button>
-            
-            <div className="my-1 border-t border-slate-50" />
-            
-            <button 
-              disabled={isOnly}
-              onClick={() => handleMenuClick('delete')}
-              className={`w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold text-left transition-colors ${isOnly ? 'text-slate-200 cursor-not-allowed bg-slate-50/30' : 'text-red-400 hover:bg-red-50 hover:text-red-600'}`}
-            >
-              <Trash2 size={12} className="shrink-0" />
-              <span>删除</span>
-              {isOnly && <Ban size={10} className="ml-auto text-slate-200" />}
-            </button>
-          </div>
-        )}
-      </div>
-
+    <div className="bg-white border border-slate-100 rounded-lg shadow-sm hover:border-indigo-100/80 transition-all flex flex-col group/card">
+      {/* Header Row: Field + Operator + Menu */}
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-        <div className="flex-1 min-w-0 h-7 flex items-center px-2 bg-slate-100/40 border border-slate-200/50 rounded text-[11px] font-bold text-slate-600 truncate cursor-pointer hover:border-indigo-300 hover:bg-white transition-all group/field">
+        {/* Source Field Selection */}
+        <div className="flex-1 min-w-0 h-7 flex items-center px-2 bg-slate-50 border border-slate-100 rounded text-[11px] font-bold text-slate-600 truncate cursor-pointer hover:border-indigo-200 transition-all group/field">
           <span className="truncate">{condition.field}</span>
-          <ChevronDown size={10} className="ml-auto text-slate-300 group-hover/field:text-indigo-500" />
+          <ChevronDown size={10} className="ml-auto text-slate-300 group-hover/field:text-indigo-400" />
         </div>
 
-        <div className="shrink-0 min-w-[72px] h-7 flex items-center justify-between px-2 border border-slate-200/50 rounded text-[11px] font-bold text-indigo-500 bg-white hover:border-indigo-300 transition-all cursor-pointer group/op">
-          <span className="truncate mr-1">{condition.operator}</span>
-          <ChevronDown size={10} className="text-indigo-300 group-hover/op:text-indigo-500 shrink-0" />
+        {/* Operator Selection */}
+        <div className="shrink-0 min-w-[70px] h-7 flex items-center justify-between px-2 border border-indigo-50 rounded text-[11px] font-bold text-indigo-500 bg-indigo-50/20 hover:border-indigo-300 transition-all cursor-pointer group/op">
+          <span className="truncate">{condition.operator}</span>
+          <ChevronDown size={10} className="text-indigo-300 ml-1 shrink-0 group-hover/op:text-indigo-500" />
         </div>
-        <div className="w-6 shrink-0" />
+
+        {/* More Menu Button - Fixed layout placement to prevent overlap */}
+        <div className="shrink-0 relative" ref={menuRef}>
+          <button 
+            onClick={() => setMenuOpen(!menuOpen)} 
+            className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${menuOpen ? 'text-indigo-600 bg-indigo-50 border border-indigo-100' : 'text-slate-300 hover:text-indigo-600 hover:bg-slate-50 border border-transparent'}`}
+          >
+            <MoreVertical size={14} />
+          </button>
+          
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-slate-100 rounded-lg shadow-xl py-1 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+              <MenuOption icon={<PlusCircle size={12}/>} label="添加组内条件" onClick={() => handleMenuClick('add_in')} />
+              <MenuOption icon={<ArrowRightCircle size={12}/>} label="添加组外条件" onClick={() => handleMenuClick('add_out')} disabled={disableAddOut} />
+              <MenuOption icon={<Layers size={12}/>} label="转换为子组" onClick={() => handleMenuClick('to_sub')} />
+              <div className="my-1 border-t border-slate-50" />
+              <MenuOption icon={<Trash2 size={12}/>} label="删除" onClick={() => handleMenuClick('delete')} variant="danger" disabled={isOnly} />
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Value Input Row */}
       <div className="px-3 pb-3">
         <div className="relative flex items-center">
           <div className="absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 pointer-events-none z-10">
-            {condition.isFx ? (
-              <FunctionSquare size={12} className="text-indigo-400 bg-indigo-50/50 rounded-[2px]" strokeWidth={2.5} />
-            ) : (
-              <Type size={12} className="text-slate-300" strokeWidth={2.5} />
-            )}
+            {condition.isFx ? <FunctionSquare size={12} className="text-indigo-400" /> : <Type size={12} className="text-slate-300" />}
             <div className="w-[1px] h-3 bg-slate-200" />
           </div>
           <input 
             type="text" 
             placeholder="输入匹配值..."
             defaultValue={condition.value}
-            className="w-full text-[11px] pl-10 pr-3 py-1.5 rounded border border-slate-200/50 bg-white focus:border-indigo-300 focus:ring-1 focus:ring-indigo-100 outline-none transition-all placeholder:text-slate-300 text-slate-600 font-medium"
+            className="w-full text-[11px] pl-10 pr-3 py-1.5 rounded border border-slate-100 bg-slate-50/30 focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all font-medium text-slate-600"
           />
         </div>
       </div>
     </div>
   );
 };
+
+const MenuOption: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void; disabled?: boolean; variant?: 'default' | 'danger' }> = ({ icon, label, onClick, disabled, variant = 'default' }) => (
+  <button 
+    disabled={disabled}
+    onClick={onClick}
+    className={`w-full flex items-center gap-2 px-3 py-2 text-[10px] font-bold text-left transition-colors ${
+      disabled 
+      ? 'text-slate-200 cursor-not-allowed' 
+      : variant === 'danger' 
+        ? 'text-red-400 hover:bg-red-50 hover:text-red-600' 
+        : 'text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
+    }`}
+  >
+    {icon}
+    <span>{label}</span>
+    {disabled && <Ban size={10} className="ml-auto opacity-50" />}
+  </button>
+);
 
 export default RowFilter;
