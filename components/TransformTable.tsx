@@ -8,8 +8,9 @@ import {
   Search,
   GripVertical,
   Settings,
-  ArrowRight,
-  Info
+  Edit3,
+  X,
+  Type as TypeIcon
 } from 'lucide-react';
 import { ColumnType, TransformationRule } from '../types';
 import { MOCK_FIELDS, TYPE_OPTIONS } from '../constants';
@@ -22,14 +23,25 @@ const TransformTable: React.FC = () => {
     { id: '4', sourceField: 'warehouse_id', targetName: 'wh_id', targetType: ColumnType.STRING },
   ]);
 
+  const [renamingIds, setRenamingIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+
+  const toggleRename = useCallback((id: string) => {
+    setRenamingIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const addRule = useCallback(() => {
     const newId = Math.random().toString(36).substr(2, 9);
+    const field = MOCK_FIELDS[0];
     setRules(prev => [...prev, { 
       id: newId, 
-      sourceField: MOCK_FIELDS[0].name, 
-      targetName: MOCK_FIELDS[0].name + '_transformed', 
+      sourceField: field.name, 
+      targetName: field.name, 
       targetType: ColumnType.STRING 
     }]);
   }, []);
@@ -55,7 +67,7 @@ const TransformTable: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Toolbar */}
-      <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col gap-2">
+      <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col gap-2 shrink-0">
         <div className="flex items-center justify-between">
            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">列表转换配置</span>
            <button 
@@ -86,81 +98,102 @@ const TransformTable: React.FC = () => {
             <p className="text-[11px]">无匹配结果</p>
           </div>
         ) : (
-          filteredRules.map((rule, index) => (
-            <div 
-              key={rule.id} 
-              className="flex items-start gap-1 px-2 py-3 border-b border-slate-100 hover:bg-indigo-50/10 transition-colors group"
-            >
-              <div className="flex flex-col items-center gap-1 mt-1 shrink-0 w-6">
-                <GripVertical size={12} className="text-slate-300 cursor-grab group-hover:text-slate-400" />
-                <span className="text-[9px] text-slate-300 font-mono">{index + 1}</span>
-              </div>
+          filteredRules.map((rule, index) => {
+            const isRenaming = renamingIds.has(rule.id);
+            const typeConfig = TYPE_OPTIONS.find(o => o.value === rule.targetType);
 
-              <div className="flex-1 flex flex-col gap-2 min-w-0">
-                <div className="flex items-center gap-1.5 overflow-hidden">
-                  <div className="flex-1 bg-slate-50/50 border border-slate-200 rounded px-1.5 py-0.5">
+            return (
+              <div 
+                key={rule.id} 
+                className="flex flex-col px-3 py-2 border-b border-slate-100 hover:bg-slate-50/50 transition-colors group relative"
+              >
+                {/* Header Row: Source Selection + Actions */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <GripVertical size={11} className="text-slate-300 shrink-0 cursor-grab group-hover:text-slate-400" />
                     <select 
                       value={rule.sourceField}
                       onChange={(e) => updateRule(rule.id, { sourceField: e.target.value })}
-                      className="w-full text-[11px] bg-transparent border-none outline-none font-medium text-slate-700 h-5"
+                      className="text-[11px] font-bold text-slate-700 bg-transparent outline-none truncate w-full hover:bg-white px-1 rounded transition-colors cursor-pointer h-6"
                     >
                       {MOCK_FIELDS.map(f => (
                         <option key={f.name} value={f.name}>{f.name}</option>
                       ))}
                     </select>
                   </div>
-                  <ArrowRight size={10} className="text-slate-300 shrink-0" />
-                  <div className="flex-1 border border-slate-200 rounded px-1.5 py-0.5 bg-white">
-                    <input 
-                      type="text"
-                      value={rule.targetName}
-                      onChange={(e) => updateRule(rule.id, { targetName: e.target.value })}
-                      className="w-full text-[11px] bg-transparent border-none outline-none font-bold text-slate-900 h-5"
-                      placeholder="目标名"
-                    />
+
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => toggleRename(rule.id)} 
+                      className={`p-1 rounded ${isRenaming ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-indigo-600 hover:bg-white'}`}
+                    >
+                      <Edit3 size={11} />
+                    </button>
+                    <button onClick={() => copyRule(rule)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded"><Copy size={11} /></button>
+                    <button onClick={() => removeRule(rule.id)} className="p-1 text-slate-400 hover:text-red-500 hover:bg-white rounded"><Trash2 size={11} /></button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <select 
-                    value={rule.targetType}
-                    onChange={(e) => updateRule(rule.id, { targetType: e.target.value as ColumnType })}
-                    className="w-[80px] text-[10px] font-bold text-indigo-600 border border-indigo-100 rounded px-1 bg-indigo-50/30 outline-none h-5"
-                  >
-                    {TYPE_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-
-                  {TYPE_OPTIONS.find(o => o.value === rule.targetType)?.hasFormat ? (
-                    <div className="flex-1 flex items-center gap-1 border border-dashed border-slate-200 rounded px-1.5 bg-slate-50">
-                      <Settings size={10} className="text-slate-400 shrink-0" />
+                {/* Optional Rename Row */}
+                {isRenaming && (
+                  <div className="mt-1.5 mb-1 animate-in slide-in-from-top-1 duration-200">
+                    <div className="relative">
+                      <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-indigo-400 uppercase">Target</div>
                       <input 
                         type="text"
-                        value={rule.format || ''}
-                        onChange={(e) => updateRule(rule.id, { format: e.target.value })}
-                        className="w-full text-[10px] font-mono bg-transparent border-none outline-none h-5 text-slate-600"
-                        placeholder="格式描述"
+                        value={rule.targetName}
+                        onChange={(e) => updateRule(rule.id, { targetName: e.target.value })}
+                        className="w-full text-[11px] font-bold text-indigo-700 bg-indigo-50/30 border border-indigo-100 rounded-md pl-14 pr-7 py-1 outline-none focus:border-indigo-400"
+                        placeholder="重命名目标..."
+                        autoFocus
                       />
+                      <button 
+                        onClick={() => toggleRename(rule.id)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
+                      >
+                        <X size={10} />
+                      </button>
                     </div>
-                  ) : (
-                    <span className="text-[9px] text-slate-400 italic">无需格式</span>
-                  )}
+                  </div>
+                )}
+
+                {/* Configuration Row: Type (30%) & Format (70%) */}
+                <div className="mt-1.5 flex gap-2 items-center">
+                  <div className="w-[30%] shrink-0">
+                    <select 
+                      value={rule.targetType}
+                      onChange={(e) => updateRule(rule.id, { targetType: e.target.value as ColumnType })}
+                      className="w-full text-[10px] font-bold text-slate-600 border border-slate-200 rounded px-1 py-0.5 bg-white outline-none focus:border-indigo-400"
+                    >
+                      {TYPE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className={`flex-1 relative ${!typeConfig?.hasFormat ? 'opacity-30' : ''}`}>
+                    <Settings size={10} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-300" />
+                    <input 
+                      type="text"
+                      value={rule.format || ''}
+                      disabled={!typeConfig?.hasFormat}
+                      onChange={(e) => updateRule(rule.id, { format: e.target.value })}
+                      className="w-full text-[10px] font-mono text-slate-500 bg-slate-50/50 border border-slate-200 rounded pl-5 pr-2 py-0.5 outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                      placeholder={typeConfig?.hasFormat ? "格式描述" : "无额外参数"}
+                    />
+                  </div>
                 </div>
               </div>
-
-              <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 shrink-0 ml-1">
-                <button onClick={() => copyRule(rule)} className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"><Copy size={12} /></button>
-                <button onClick={() => removeRule(rule.id)} className="p-1 text-slate-400 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
       <div className="p-2 border-t border-slate-100 bg-slate-50 text-[10px] text-slate-400 flex justify-between items-center shrink-0">
-        <span>SCHEMA 有效</span>
-        <button className="text-indigo-600 font-bold">批量设置</button>
+        <span className="flex items-center gap-1 uppercase tracking-tighter">
+           <TypeIcon size={10} /> 字段转换模式
+        </span>
+        <button className="text-indigo-600 font-bold hover:underline">批量设置</button>
       </div>
     </div>
   );
