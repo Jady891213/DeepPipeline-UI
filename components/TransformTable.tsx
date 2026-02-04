@@ -4,13 +4,11 @@ import {
   Plus, 
   Trash2, 
   Copy, 
-  AlertCircle, 
   Search,
   GripVertical,
   Settings,
-  Edit3,
-  X,
-  Type as TypeIcon
+  Type as TypeIcon,
+  ArrowRight
 } from 'lucide-react';
 import { ColumnType, TransformationRule } from '../types';
 import { MOCK_FIELDS, TYPE_OPTIONS } from '../constants';
@@ -23,17 +21,7 @@ const TransformTable: React.FC = () => {
     { id: '4', sourceField: 'warehouse_id', targetName: 'wh_id', targetType: ColumnType.STRING },
   ]);
 
-  const [renamingIds, setRenamingIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-
-  const toggleRename = useCallback((id: string) => {
-    setRenamingIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
 
   const addRule = useCallback(() => {
     const newId = Math.random().toString(36).substr(2, 9);
@@ -66,134 +54,126 @@ const TransformTable: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Toolbar */}
-      <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-col gap-2 shrink-0">
-        <div className="flex items-center justify-between">
-           <span className="text-[11px] font-bold text-slate-500 uppercase tracking-tight">列表转换配置</span>
-           <button 
-            onClick={addRule}
-            className="flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 shadow-sm transition-all"
-          >
-            <Plus size={12} className="text-indigo-600" />
-            新增
-          </button>
+      {/* Enhanced Toolbar */}
+      <div className="p-3 bg-white border-b border-slate-100 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-4">
+          <span className="text-xs font-bold text-slate-700">字段转换配置</span>
+          <div className="relative w-64">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="搜索字段名称..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1 text-[11px] border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+            />
+          </div>
         </div>
-        <div className="relative group">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500" />
-          <input 
-            type="text" 
-            placeholder="搜索字段..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-          />
-        </div>
+        <button 
+          onClick={addRule}
+          className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 rounded text-[11px] font-bold text-white hover:bg-indigo-700 shadow-sm transition-all"
+        >
+          <Plus size={12} />
+          添加转换
+        </button>
       </div>
 
-      {/* List Body */}
-      <div className="flex-1 overflow-y-auto">
-        {filteredRules.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-            <AlertCircle size={24} className="mb-2 opacity-20" />
-            <p className="text-[11px]">无匹配结果</p>
-          </div>
-        ) : (
-          filteredRules.map((rule, index) => {
-            const isRenaming = renamingIds.has(rule.id);
-            const typeConfig = TYPE_OPTIONS.find(o => o.value === rule.targetType);
-
-            return (
-              <div 
-                key={rule.id} 
-                className="flex flex-col px-3 py-2 border-b border-slate-100 hover:bg-slate-50/50 transition-colors group relative"
-              >
-                {/* Header Row: Source Selection + Actions */}
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                    <GripVertical size={11} className="text-slate-300 shrink-0 cursor-grab group-hover:text-slate-400" />
+      {/* Table-style Layout */}
+      <div className="flex-1 overflow-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-100">
+              <th className="w-8"></th>
+              <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[25%]">源字段</th>
+              <th className="w-6 text-slate-300"></th>
+              <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[25%]">目标名称</th>
+              <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[15%]">转换类型</th>
+              <th className="px-3 py-2 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider w-[25%]">格式参数</th>
+              <th className="px-3 py-2 text-right text-[10px] font-bold text-slate-500 uppercase tracking-wider w-20">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {filteredRules.map((rule) => {
+              const typeConfig = TYPE_OPTIONS.find(o => o.value === rule.targetType);
+              return (
+                <tr key={rule.id} className="group hover:bg-indigo-50/20 transition-colors">
+                  <td className="pl-2 text-center">
+                    <GripVertical size={11} className="text-slate-300 cursor-grab group-hover:text-slate-400" />
+                  </td>
+                  <td className="px-3 py-2">
                     <select 
                       value={rule.sourceField}
                       onChange={(e) => updateRule(rule.id, { sourceField: e.target.value })}
-                      className="text-[11px] font-bold text-slate-700 bg-transparent outline-none truncate w-full hover:bg-white px-1 rounded transition-colors cursor-pointer h-6"
+                      className="w-full text-[11px] font-bold text-slate-700 bg-transparent outline-none border-b border-transparent hover:border-slate-200 focus:border-indigo-400 transition-colors cursor-pointer"
                     >
                       {MOCK_FIELDS.map(f => (
                         <option key={f.name} value={f.name}>{f.name}</option>
                       ))}
                     </select>
-                  </div>
-
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => toggleRename(rule.id)} 
-                      className={`p-1 rounded ${isRenaming ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-indigo-600 hover:bg-white'}`}
-                    >
-                      <Edit3 size={11} />
-                    </button>
-                    <button onClick={() => copyRule(rule)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded"><Copy size={11} /></button>
-                    <button onClick={() => removeRule(rule.id)} className="p-1 text-slate-400 hover:text-red-500 hover:bg-white rounded"><Trash2 size={11} /></button>
-                  </div>
-                </div>
-
-                {/* Optional Rename Row */}
-                {isRenaming && (
-                  <div className="mt-1.5 mb-1 animate-in slide-in-from-top-1 duration-200">
-                    <div className="relative">
-                      <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-indigo-400 uppercase">Target</div>
-                      <input 
-                        type="text"
-                        value={rule.targetName}
-                        onChange={(e) => updateRule(rule.id, { targetName: e.target.value })}
-                        className="w-full text-[11px] font-bold text-indigo-700 bg-indigo-50/30 border border-indigo-100 rounded-md pl-14 pr-7 py-1 outline-none focus:border-indigo-400"
-                        placeholder="重命名目标..."
-                        autoFocus
-                      />
-                      <button 
-                        onClick={() => toggleRename(rule.id)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"
-                      >
-                        <X size={10} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Configuration Row: Type (30%) & Format (70%) */}
-                <div className="mt-1.5 flex gap-2 items-center">
-                  <div className="w-[30%] shrink-0">
+                  </td>
+                  <td className="text-center">
+                    <ArrowRight size={10} className="text-slate-300" />
+                  </td>
+                  <td className="px-3 py-2">
+                    <input 
+                      type="text"
+                      value={rule.targetName}
+                      onChange={(e) => updateRule(rule.id, { targetName: e.target.value })}
+                      className="w-full text-[11px] font-bold text-indigo-700 bg-transparent outline-none border-b border-transparent hover:border-slate-200 focus:border-indigo-400 transition-colors"
+                      placeholder="目标字段名"
+                    />
+                  </td>
+                  <td className="px-3 py-2">
                     <select 
                       value={rule.targetType}
                       onChange={(e) => updateRule(rule.id, { targetType: e.target.value as ColumnType })}
-                      className="w-full text-[10px] font-bold text-slate-600 border border-slate-200 rounded px-1 py-0.5 bg-white outline-none focus:border-indigo-400"
+                      className="w-full text-[10px] font-bold text-slate-600 border border-slate-200 rounded px-1.5 py-0.5 bg-white outline-none focus:border-indigo-400"
                     >
                       {TYPE_OPTIONS.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
-                  </div>
-
-                  <div className={`flex-1 relative ${!typeConfig?.hasFormat ? 'opacity-30' : ''}`}>
-                    <Settings size={10} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-300" />
-                    <input 
-                      type="text"
-                      value={rule.format || ''}
-                      disabled={!typeConfig?.hasFormat}
-                      onChange={(e) => updateRule(rule.id, { format: e.target.value })}
-                      className="w-full text-[10px] font-mono text-slate-500 bg-slate-50/50 border border-slate-200 rounded pl-5 pr-2 py-0.5 outline-none focus:border-indigo-400 focus:bg-white transition-all"
-                      placeholder={typeConfig?.hasFormat ? "格式描述" : "无额外参数"}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className={`relative ${!typeConfig?.hasFormat ? 'opacity-30' : ''}`}>
+                      <Settings size={10} className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-300" />
+                      <input 
+                        type="text"
+                        value={rule.format || ''}
+                        disabled={!typeConfig?.hasFormat}
+                        onChange={(e) => updateRule(rule.id, { format: e.target.value })}
+                        className="w-full text-[10px] font-mono text-slate-500 bg-slate-50/50 border border-slate-200 rounded pl-5 pr-2 py-0.5 outline-none focus:border-indigo-400 focus:bg-white transition-all"
+                        placeholder={typeConfig?.hasFormat ? "输入格式..." : "-"}
+                      />
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => copyRule(rule)} className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-white rounded border border-transparent hover:border-slate-100"><Copy size={11} /></button>
+                      <button onClick={() => removeRule(rule.id)} className="p-1 text-slate-400 hover:text-red-500 hover:bg-white rounded border border-transparent hover:border-slate-100"><Trash2 size={11} /></button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filteredRules.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+             <TypeIcon size={24} className="mb-2 opacity-10" />
+             <p className="text-[11px]">未搜索到相关字段配置</p>
+          </div>
         )}
       </div>
 
-      <div className="p-2 border-t border-slate-100 bg-slate-50 text-[10px] text-slate-400 flex justify-between items-center shrink-0">
-        <span className="flex items-center gap-1 uppercase tracking-tighter">
-           <TypeIcon size={10} /> 字段转换模式
-        </span>
-        <button className="text-indigo-600 font-bold hover:underline">批量设置</button>
+      {/* Summary Footer */}
+      <div className="p-2 border-t border-slate-100 bg-slate-50 text-[10px] text-slate-500 flex justify-between items-center shrink-0">
+        <div className="flex items-center gap-4">
+          <span>总计: <strong>{rules.length}</strong> 个转换规则</span>
+          <span className="w-[1px] h-3 bg-slate-300"></span>
+          <span>当前显示: <strong>{filteredRules.length}</strong></span>
+        </div>
+        <button className="text-indigo-600 font-bold hover:underline">导出配置 (JSON)</button>
       </div>
     </div>
   );
